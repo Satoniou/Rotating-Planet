@@ -3,6 +3,26 @@ varying vec2 vUvs;
 uniform vec2 resolution;
 uniform float time;
 
+// Converts a color from linear light gamma to sRGB gamma
+vec3 fromLinear(vec3 linearRGB)
+{
+    bvec3 cutoff = lessThan(linearRGB, vec3(0.0031308));
+    vec3 higher = vec3(1.055)*pow(linearRGB, vec3(1.0/2.4)) - vec3(0.055);
+    vec3 lower = linearRGB * vec3(12.92);
+
+    return vec3(mix(higher, lower, cutoff));
+}
+
+// Converts a color from sRGB gamma to linear light gamma
+vec3 toLinear(vec3 sRGB)
+{
+    bvec3 cutoff = lessThan(sRGB, vec3(0.04045));
+    vec3 higher = pow((sRGB + vec3(0.055))/vec3(1.055), vec3(2.4));
+    vec3 lower = sRGB / vec3(12.92);
+
+    return vec3(mix(higher, lower, cutoff));
+}
+
 float inverseLerp(float v, float minValue, float maxValue) {
     return (v - minValue) / (maxValue - minValue);
 }
@@ -167,11 +187,229 @@ float fbm(vec3 p, int octaves, float persistence, float lacunarity, float expone
   return total;
 }
 
-vec3 GenerateStars(vec2 pixelCoords) {
-    return vec3(0.0);
+vec3 GenerateGridStars(
+    vec2 pixelCoords, float starRadius, float cellWidth, 
+    float seed, bool twinkle) {
+
+    vec2 cellCoords = (fract(pixelCoords / cellWidth) - 0.5) * cellWidth;
+    vec2 cellID = floor(pixelCoords / cellWidth) + seed / 100.0;
+    vec3 cellHashValue = hash3(vec3(cellID, 0.0));
+
+    float starBrightness = saturate(cellHashValue.z);
+    vec2 starPosition = vec2(0.0);
+    starPosition += cellHashValue.xy * (cellWidth * 0.5 - starRadius * 4.0);
+    float distToStar = length(cellCoords - starPosition);
+    float glow = exp(-2.0 * distToStar / starRadius);
+
+    return vec3(glow * starBrightness);
 }
 
+vec3 GenerateStars(vec2 pixelCoords) {
+    vec3 stars = vec3(0.0);
+
+    float size = 4.0;
+    float cellWidth = 500.0;
+    for (float i = 0.0; i <= 2.0; ++i) {
+        stars += GenerateGridStars(pixelCoords, size, cellWidth, i, true);
+        size *= 0.5;
+        cellWidth *= 0.35;
+    }
+
+    for (float i = 3.0; i <= 5.0; ++i) {
+        stars += GenerateGridStars(pixelCoords, size, cellWidth, i, false);
+        size *= 0.5;
+        cellWidth *= 0.35;
+    }
+
+    return stars;
+}
+
+float sdfCircle(vec2 p, float r) {
+    return length(p) - r;
+}
+
+float map(vec3 pos) {
+    return fbm(pos, 6, 0.5, 2.0, 4.0);
+}
+
+vec3 calcNormal(vec3 pos, vec3 n) {
+    vec2 e = vec2(0.0001, 0.0);
+    return normalize(
+        n + -500.0 * vec3(
+            map(pos + e.xyy) - map(pos - e.xyy),
+            map(pos + e.yxy) - map(pos - e.yxy),
+            map(pos + e.yyx) - map(pos - e.yyx)
+        )
+    );
+}
+
+mat3 rotateMat(float radians, int axis) {
+    float s = sin(radians);
+    float c = cos(radians);
+    switch (axis) {
+        case 0:
+            return mat3(
+                1.0, 0.0, 0.0,
+                0.0, c, s,
+                0.0, -s, c
+            );
+        case 1:
+            return mat3(
+                c, 0.0, s,
+                0.0, 1.0, 0.0,
+                -s, 0.0, c
+            );
+        case 2:
+            return mat3(
+                c, s, 0.0,
+                -s, c, 0.0,
+                0.0, 0.0, 1.0
+            );
+        default:
+            break;
+    }
+
+    return mat3(
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0
+    );
+}
+
+mat3 rotateX(float radians) {
+    return rotateMat(radians, 0);
+}
+
+mat3 rotateY(float radians) {
+    return rotateMat(radians, 1);
+}
+
+mat3 rotateZ(float radians) {
+    return rotateMat(radians, 2);
+}
+
+// vec3 decimalRGB(vec3 rgb) {
+//     float x = remap(rgb.x, 0.0, 255.0, 0.0, 1.0);
+//     float y = remap(rgb.y, 0.0, 255.0, 0.0, 1.0);
+//     float z = remap(rgb.z, 0.0, 255.0, 0.0, 1.0);  
+//     return vec3(x, y, z);
+// }
+
+vec3 DARK_GOLD  = vec3(201.0, 144.0, 65.0 ) / 255.0;
+vec3 DARK_DIRT  = vec3(170.0, 75.0, 0.0) / 255.0;
+vec3 DETAILS    = vec3(216.0, 202.0, 157.0) / 255.0;
+vec3 LIGHT_DIRT = vec3(227.0, 220.0, 203.0) / 255.0;
+vec3 ICE        = vec3(235.0, 243.0, 246.0) / 255.0;
+
 vec3 DrawPlanet(vec2 pixelCoords, vec3 colour) {
+    float d = sdfCircle(pixelCoords, 400.0);
+
+    vec3 planetColour = vec3(0.0);
+
+    vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
+
+    if (d <= 0.0) {
+        float x = pixelCoords.x / 400.0;
+        float y = pixelCoords.y / 400.0;
+
+        float z = sqrt(1.0 - x * x - y * y);
+
+        vec3 viewNormal = vec3(x, y, z);
+
+        // Define planet rotation, position relative to rotation, and
+        // view direction wrt rotation.
+        mat3 planetRotation = rotateY(-time * 0.1);
+        vec3 wsPosition = planetRotation * viewNormal;
+        vec3 wsNormal = planetRotation * normalize(wsPosition);
+        vec3 wsViewDir = planetRotation * vec3(0.0, 0.0, 1.0);
+
+        // Noise parameters for building terrain
+        vec3 noiseCoord = wsPosition * 8.0;
+        float noiseSample1 = fbm(noiseCoord, 8, 0.5, 2.0, 4.0);
+        float noiseSample2 = fbm(noiseCoord, 4, 16.0, 4.0, 8.0);
+
+        // Colouring
+        planetColour = toLinear(DARK_GOLD);
+        vec3 lighterColour = mix(
+            toLinear(LIGHT_DIRT),
+            planetColour,
+            smoothstep(0.4, 0.93, abs(viewNormal.y))
+        );
+
+        planetColour = mix(planetColour, lighterColour, vUvs.y);
+
+        if (abs(viewNormal.y) > 0.0 && abs(viewNormal.y) < 1.0){
+            float smoothingNoise = noiseSample1 / 10.0;
+            float smoothingFactorOut = -0.2 + abs(viewNormal.y) + smoothingNoise;
+            float smoothingFactorIn = 0.52 - abs(viewNormal.y) + smoothingNoise;
+
+            float smoothFactor = (abs(viewNormal.y) < 0.37) ? smoothingFactorIn : smoothingFactorOut;
+            planetColour = mix(
+                toLinear(DARK_DIRT), 
+                planetColour, 
+                smoothstep(0.2, 0.5, smoothFactor)
+            );   
+
+            float detailing = noise(viewNormal * noiseSample2);
+            planetColour = mix(
+                planetColour,
+                toLinear(DETAILS),
+                smoothstep(0.1, 0.15, detailing)
+            );
+        }
+
+        // Lighting
+        vec2 specParams = mix(
+            vec2(0.5, 32.0),
+            vec2(0.01, 2.0),
+            smoothstep(0.05, 0.06, noiseSample1));
+        vec3 wsLightDir = planetRotation * lightDir;
+        vec3 wsSurfaceNormal = calcNormal(noiseCoord, wsNormal);
+
+        float wrap = 0.05;
+        float dp = max(
+            0.0, (dot(wsLightDir, wsSurfaceNormal) + wrap) / (1.0 + wrap));
+        
+        vec3 lightColour = mix(
+            vec3(0.25, 0.0, 0.0),
+            vec3(0.75),
+            smoothstep(0.05, 0.5, dp));
+        vec3 ambient = vec3(0.005);
+        vec3 diffuse = lightColour * dp;
+
+        vec3 r = normalize(reflect(-wsLightDir, wsSurfaceNormal));
+        float phongValue = max(0.0, dot(wsViewDir, r));
+        phongValue = pow(phongValue, specParams.y);
+
+        vec3 specular = vec3(phongValue) * specParams.x * diffuse;
+
+        vec3 planetShading = planetColour * (diffuse + ambient) + specular;
+        planetColour = planetShading;
+
+        // Fresnel effect
+        float fresnel = smoothstep(1.0, 0.1, viewNormal.z);
+        fresnel = pow(fresnel, 8.0) * dp;
+        planetColour = mix(planetColour, vec3(0.33, 0.12, 0.05), fresnel);
+    }
+
+    colour = mix(colour, planetColour, smoothstep(0.0, -1.0, d));
+
+    if (d < 40.0 && d >= -1.0) {
+        // Produce dark glow around planet
+        // Repeat with slightly larger circle
+        float x = pixelCoords.x / 440.0;
+        float y = pixelCoords.y / 440.0;
+        float z = sqrt(1.0 - x * x - y * y);
+        vec3 normal = vec3(x, y, z);
+
+        float lighting = dot(normal, lightDir);
+        lighting = smoothstep(0.15, 1.0, lighting);
+
+        vec3 glowColour = vec3(0.05, 0.05, 0.1) *
+            exp(-0.01 * d * d) * lighting * 0.75;
+        colour += glowColour;
+    }
+
     return colour;
 }
 
@@ -182,5 +420,5 @@ void main() {
     colour = GenerateStars(pixelCoords);
     colour = DrawPlanet(pixelCoords, colour);
 
-    gl_FragColor = vec4(pow(colour, vec3(1.0 / 2.2)), 1.0);
+    gl_FragColor = vec4(fromLinear(colour), 1.0);
 }
