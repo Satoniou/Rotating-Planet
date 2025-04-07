@@ -295,8 +295,8 @@ mat3 rotateZ(float radians) {
 //     return vec3(x, y, z);
 // }
 
-vec3 DARK_GOLD  = vec3(201.0, 144.0, 65.0 ) / 255.0;
-vec3 DARK_DIRT  = vec3(170.0, 75.0, 0.0) / 255.0;
+vec3 DARK_GOLD  = vec3(201.0, 144.0,  65.0) / 255.0;
+vec3 DARK_DIRT  = vec3(170.0,  75.0,   0.0) / 255.0;
 vec3 DETAILS    = vec3(216.0, 202.0, 157.0) / 255.0;
 vec3 LIGHT_DIRT = vec3(227.0, 220.0, 203.0) / 255.0;
 vec3 ICE        = vec3(235.0, 243.0, 246.0) / 255.0;
