@@ -187,6 +187,45 @@ float fbm(vec3 p, int octaves, float persistence, float lacunarity, float expone
   return total;
 }
 
+float cellular(vec3 coords) {
+  vec3 gridBasePosition = floor(coords);
+  vec3 gridCoordOffset = fract(coords);
+
+  float closest = 1.0;
+  for (float z = -2.0; z <= 2.0; z += 1.0) {
+    for (float y = -2.0; y <= 2.0; y += 1.0) {
+       for (float x = -2.0; x <= 2.0; x += 1.0) {
+           vec3 neighbourCellPosition = vec3(x, y, z);
+           vec3 cellWorldPosition = gridBasePosition + neighbourCellPosition;
+           vec3 cellOffset = vec3(
+           noise(vec3(cellWorldPosition) + vec3(243.432, 324.235, 0.0)),
+           noise(vec3(cellWorldPosition)),
+           noise(vec3(cellWorldPosition) + vec3(801.023, 102.467, 13.224)));
+
+           float distToNeighbour = length(
+           neighbourCellPosition + cellOffset - gridCoordOffset);
+           closest = min(closest, distToNeighbour);
+       }
+    }
+  }
+
+  return closest;
+}
+
+float domainWarpingFBM(vec3 coords) {
+  vec3 offset = vec3(
+    fbm(coords, 4, 0.5, 2.0, 4.0),
+    fbm(coords + vec3(43.235, 23.112, 0.0), 4, 0.5, 2.0, 4.0), 0.0);
+  float noiseSample = fbm(coords + offset, 1, 0.5, 2.0, 4.0);
+
+  vec3 offset2 = vec3(
+    fbm(coords + 4.0 * offset + vec3(5.325, 1.421, 3.235), 4, 0.5, 2.0, 4.0),
+    fbm(coords + 4.0 * offset + vec3(4.32, 0.532, 6.324), 4, 0.5, 2.0, 4.0), 0.0);
+  noiseSample = fbm(coords + 4.0 * offset2, 1, 0.5, 2.0, 4.0);
+
+  return noiseSample;
+}
+
 vec3 GenerateGridStars(
     vec2 pixelCoords, float starRadius, float cellWidth, 
     float seed, bool twinkle) {
@@ -318,7 +357,7 @@ vec3 DrawPlanet(vec2 pixelCoords, vec3 colour) {
 
         // Define planet rotation, position relative to rotation, and
         // view direction wrt rotation.
-        mat3 planetRotation = rotateY(-time * 0.1);
+        mat3 planetRotation = rotateY(-time * 0.0);
         vec3 wsPosition = planetRotation * viewNormal;
         vec3 wsNormal = planetRotation * normalize(wsPosition);
         vec3 wsViewDir = planetRotation * vec3(0.0, 0.0, 1.0);
@@ -326,7 +365,7 @@ vec3 DrawPlanet(vec2 pixelCoords, vec3 colour) {
         // Noise parameters for building terrain
         vec3 noiseCoord = wsPosition * 8.0;
         float noiseSample1 = fbm(noiseCoord, 8, 0.5, 2.0, 4.0);
-        float noiseSample2 = fbm(noiseCoord, 4, 16.0, 4.0, 8.0);
+        // float noiseSample2 = fbm(noiseCoord, 4, 16.0, 4.0, 8.0);
 
         // Colouring
         planetColour = toLinear(DARK_GOLD);
@@ -336,26 +375,42 @@ vec3 DrawPlanet(vec2 pixelCoords, vec3 colour) {
             smoothstep(0.4, 0.93, abs(viewNormal.y))
         );
 
-        planetColour = mix(planetColour, lighterColour, vUvs.y);
+        planetColour = mix(planetColour, lighterColour, abs(vUvs.y));
 
-        if (abs(viewNormal.y) > 0.0 && abs(viewNormal.y) < 1.0){
+        vec3 middleColour = mix(toLinear(DARK_GOLD), toLinear(LIGHT_DIRT), 0.3);
+
+        planetColour = mix(
+            middleColour,
+            planetColour,
+            smoothstep(0.1, 0.21, abs(viewNormal.y))
+        );
+
+        if (abs(viewNormal.y) > 0.0 && abs(viewNormal.y) < 1.0) {
             float smoothingNoise = noiseSample1 / 10.0;
             float smoothingFactorOut = -0.2 + abs(viewNormal.y) + smoothingNoise;
             float smoothingFactorIn = 0.52 - abs(viewNormal.y) + smoothingNoise;
 
             float smoothFactor = (abs(viewNormal.y) < 0.37) ? smoothingFactorIn : smoothingFactorOut;
-            planetColour = mix(
-                toLinear(DARK_DIRT), 
-                planetColour, 
-                smoothstep(0.2, 0.5, smoothFactor)
-            );   
 
-            float detailing = noise(viewNormal * noiseSample2);
-            planetColour = mix(
-                planetColour,
+            // float noiseSample2 = 1.0 - cellular(wsPosition);
+            float noiseSample2 = remap(domainWarpingFBM(wsPosition), -1.0, 1.0, 0.0, 1.0);
+            vec3 detailing = mix(
+                toLinear(DARK_DIRT),
                 toLinear(DETAILS),
-                smoothstep(0.1, 0.15, detailing)
+                smoothstep(0.4, 0.5, noiseSample2 * smoothFactor * 1.8)
             );
+
+            planetColour = mix(
+                detailing,
+                planetColour,
+                smoothstep(0.2, 0.5, noiseSample2 * smoothFactor * 1.8)
+            );
+
+            // planetColour = mix(
+            //     toLinear(DARK_DIRT), 
+            //     planetColour, 
+            //     smoothstep(0.2, 0.5, smoothFactor)
+            // );      
         }
 
         // Lighting
