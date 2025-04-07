@@ -357,7 +357,7 @@ vec3 DrawPlanet(vec2 pixelCoords, vec3 colour) {
 
         // Define planet rotation, position relative to rotation, and
         // view direction wrt rotation.
-        mat3 planetRotation = rotateY(-time * 0.0);
+        mat3 planetRotation = rotateY(time * 0.1);
         vec3 wsPosition = planetRotation * viewNormal;
         vec3 wsNormal = planetRotation * normalize(wsPosition);
         vec3 wsViewDir = planetRotation * vec3(0.0, 0.0, 1.0);
