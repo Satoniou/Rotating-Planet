@@ -140,7 +140,7 @@ vec4 snoise(vec3 v)
 // https://iquilezles.org/
 //
 // https://www.shadertoy.com/view/Xsl3Dl
-vec3 hash3( vec3 p ) // replace this by something better
+vec3 hash3( vec3 p )
 {
 	p = vec3( dot(p,vec3(127.1,311.7, 74.7)),
             dot(p,vec3(269.5,183.3,246.1)),
@@ -185,31 +185,6 @@ float fbm(vec3 p, int octaves, float persistence, float lacunarity, float expone
   total = pow(total, exponentiation);
 
   return total;
-}
-
-float cellular(vec3 coords) {
-  vec3 gridBasePosition = floor(coords);
-  vec3 gridCoordOffset = fract(coords);
-
-  float closest = 1.0;
-  for (float z = -2.0; z <= 2.0; z += 1.0) {
-    for (float y = -2.0; y <= 2.0; y += 1.0) {
-       for (float x = -2.0; x <= 2.0; x += 1.0) {
-           vec3 neighbourCellPosition = vec3(x, y, z);
-           vec3 cellWorldPosition = gridBasePosition + neighbourCellPosition;
-           vec3 cellOffset = vec3(
-           noise(vec3(cellWorldPosition) + vec3(243.432, 324.235, 0.0)),
-           noise(vec3(cellWorldPosition)),
-           noise(vec3(cellWorldPosition) + vec3(801.023, 102.467, 13.224)));
-
-           float distToNeighbour = length(
-           neighbourCellPosition + cellOffset - gridCoordOffset);
-           closest = min(closest, distToNeighbour);
-       }
-    }
-  }
-
-  return closest;
 }
 
 float domainWarpingFBM(vec3 coords) {
@@ -327,13 +302,6 @@ mat3 rotateZ(float radians) {
     return rotateMat(radians, 2);
 }
 
-// vec3 decimalRGB(vec3 rgb) {
-//     float x = remap(rgb.x, 0.0, 255.0, 0.0, 1.0);
-//     float y = remap(rgb.y, 0.0, 255.0, 0.0, 1.0);
-//     float z = remap(rgb.z, 0.0, 255.0, 0.0, 1.0);  
-//     return vec3(x, y, z);
-// }
-
 vec3 DARK_GOLD  = vec3(201.0, 144.0,  65.0) / 255.0;
 vec3 DARK_DIRT  = vec3(170.0,  75.0,   0.0) / 255.0;
 vec3 DETAILS    = vec3(216.0, 202.0, 157.0) / 255.0;
@@ -365,7 +333,7 @@ vec3 DrawPlanet(vec2 pixelCoords, vec3 colour) {
         // Noise parameters for building terrain
         vec3 noiseCoord = wsPosition * 8.0;
         float noiseSample1 = fbm(noiseCoord, 8, 0.5, 2.0, 4.0);
-        // float noiseSample2 = fbm(noiseCoord, 4, 16.0, 4.0, 8.0);
+        float noiseSample2 = remap(domainWarpingFBM(wsPosition), -1.0, 1.0, 0.0, 1.0);
 
         // Colouring
         planetColour = toLinear(DARK_GOLD);
@@ -392,8 +360,6 @@ vec3 DrawPlanet(vec2 pixelCoords, vec3 colour) {
 
             float smoothFactor = (abs(viewNormal.y) < 0.37) ? smoothingFactorIn : smoothingFactorOut;
 
-            // float noiseSample2 = 1.0 - cellular(wsPosition);
-            float noiseSample2 = remap(domainWarpingFBM(wsPosition), -1.0, 1.0, 0.0, 1.0);
             vec3 detailing = mix(
                 toLinear(DARK_DIRT),
                 toLinear(DETAILS),
@@ -405,12 +371,6 @@ vec3 DrawPlanet(vec2 pixelCoords, vec3 colour) {
                 planetColour,
                 smoothstep(0.2, 0.5, noiseSample2 * smoothFactor * 1.8)
             );
-
-            // planetColour = mix(
-            //     toLinear(DARK_DIRT), 
-            //     planetColour, 
-            //     smoothstep(0.2, 0.5, smoothFactor)
-            // );      
         }
 
         // Lighting
@@ -450,7 +410,7 @@ vec3 DrawPlanet(vec2 pixelCoords, vec3 colour) {
     colour = mix(colour, planetColour, smoothstep(0.0, -1.0, d));
 
     if (d < 40.0 && d >= -1.0) {
-        // Produce dark glow around planet
+        // Produce glow around planet
         // Repeat with slightly larger circle
         float x = pixelCoords.x / 440.0;
         float y = pixelCoords.y / 440.0;
