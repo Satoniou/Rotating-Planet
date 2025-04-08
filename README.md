@@ -1,7 +1,7 @@
 # Rotating-Planet
 Shader model of a rotating planet using three.js and GLSL. The model includes a basic lighting system and procedurally generated terrain using [Fractal Brownian Motion](https://thebookofshaders.com/13/).
 
-[Planet.jpeg](https://github.com/Satoniou/Rotating-Planet/blob/main/Images/Planet.jpeg)
+![Planet.jpeg](https://github.com/Satoniou/Rotating-Planet/blob/main/Images/Planet.jpeg)
 
 This project is based on SimonDev's course [GLSL Shaders from Scratch](https://simondev.teachable.com/courses/).
 
@@ -72,7 +72,7 @@ float domainWarpingFBM(vec3 coords) {
 ## Stars
 The stars in the background are generated using the `GenerateStars()` function. The `hash3()` function is used to determine the random position for each star in `GenerateGridStars()`. 
 
-[Stars.jpeg](https://github.com/Satoniou/Rotating-Planet/blob/main/Images/Stars.jpeg)
+![Stars.jpeg](https://github.com/Satoniou/Rotating-Planet/blob/main/Images/Stars.jpeg)
 
 
 ## Planet
